@@ -8,11 +8,11 @@ use self::ops::*;
 
 const FEATURES: usize = 768;
 const FT_OUT: usize = 32;
-const L1_OUT: usize = 1;
+const L1_OUT: usize = 16;
 
 const ACTIVATION_RANGE: i8 = 127;
 const WEIGHT_SCALE: i8 = 64;
-const OUTPUT_SCALE: i32 = 115;
+const OUTPUT_SCALE: i32 = 203;
 
 #[derive(Debug, Clone)]
 pub struct Nnue {
@@ -29,7 +29,8 @@ impl Nnue {
         self.ft.empty(&mut accumulator[Color::Black as usize]);
         NnueState {
             model: self,
-            accumulator
+            accumulator,
+            material: 0,
         }
     }
 }
@@ -37,7 +38,8 @@ impl Nnue {
 #[derive(Debug, Clone)]
 pub struct NnueState<'m> {
     model: &'m Nnue,
-    accumulator: [[i16; FT_OUT]; Color::NUM]
+    accumulator: [[i16; FT_OUT]; Color::NUM],
+    material: usize,
 }
 
 pub fn feature(perspective: Color, mut color: Color, piece: Piece, mut square: Square) -> usize {
@@ -59,6 +61,8 @@ pub fn feature(perspective: Color, mut color: Color, piece: Piece, mut square: S
     }
 }
 
+const VALUES: [usize; Piece::NUM] = [1, 3, 3, 5, 8, 0];
+
 impl<'s> NnueState<'s> {
     pub fn model(&self) -> &Nnue {
         &self.model
@@ -69,6 +73,7 @@ impl<'s> NnueState<'s> {
     }
 
     pub fn add(&mut self, color: Color, piece: Piece, square: Square) {
+        self.material += VALUES[piece as usize];
         for &perspective in &Color::ALL {
             let feature = feature(perspective, color, piece, square);
             self.model.ft.add(feature, &mut self.accumulator[perspective as usize]);
@@ -76,6 +81,7 @@ impl<'s> NnueState<'s> {
     }
 
     pub fn sub(&mut self, color: Color, piece: Piece, square: Square) {
+        self.material -= VALUES[piece as usize];
         for &perspective in &Color::ALL {
             let feature = feature(perspective, color, piece, square);
             self.model.ft.sub(feature, &mut self.accumulator[perspective as usize]);
@@ -89,8 +95,8 @@ impl<'s> NnueState<'s> {
         self.accumulator[(!side_to_move) as usize]
             .clipped_relu(0, ACTIVATION_RANGE, &mut inputs[1]);
         let inputs = bytemuck::cast(inputs);
-        let mut outputs = [0; L1_OUT];
-        self.model.l1.activate(&inputs, &mut outputs);
-        outputs[0] * OUTPUT_SCALE / WEIGHT_SCALE as i32 / ACTIVATION_RANGE as i32
+        let bucket = 15.min(self.material * 16 / 76);
+        let output = self.model.l1.activate(&inputs, bucket);
+        output * OUTPUT_SCALE / WEIGHT_SCALE as i32 / ACTIVATION_RANGE as i32
     }
 }

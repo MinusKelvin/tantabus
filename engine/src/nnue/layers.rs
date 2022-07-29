@@ -13,11 +13,8 @@ impl<
     const INPUTS: usize,
     const OUTPUTS: usize
 > Linear<W, B, INPUTS, OUTPUTS> where [W; INPUTS]: Dot<B> {
-    pub fn activate(&self, inputs: &[W; INPUTS], outputs: &mut [B; OUTPUTS]) {
-        *outputs = self.biases;
-        for (o, w) in outputs.iter_mut().zip(&self.weights) {
-            *o = o.add(inputs.dot(w));
-        }
+    pub fn activate(&self, inputs: &[W; INPUTS], output: usize) -> B {
+        self.biases[output].add(inputs.dot(&self.weights[output]))
     }
 }
 
